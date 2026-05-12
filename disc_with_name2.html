@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DISC 行動特性診断</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Hiragino Sans',sans-serif;background:#f2f2f7;min-height:100vh;color:#1a1a1a;}
+input,button,textarea{font-family:inherit;}
+#root{min-height:100vh;}
+code{font-family:'SF Mono','Courier New',monospace;background:#f0eef8;color:#5a3fa0;padding:2px 6px;border-radius:4px;font-size:0.9em;}
+pre{background:#1e1e2e;color:#cdd6f4;padding:1rem;border-radius:10px;font-size:11px;line-height:1.6;overflow-x:auto;white-space:pre-wrap;word-break:break-all;}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script>
+// ════════════════════════════════════════════════════
+//  ① ここを設定してください（Supabase の情報を貼り付け）
+// ════════════════════════════════════════════════════
+const SUPABASE_URL = 'https://jyuuybplvmtdazqtoahb.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp5dXV5YnBsdm10ZGF6cXRvYWhiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg0ODU2MDEsImV4cCI6MjA5NDA2MTYwMX0.wGPunzTa5Y900WbHvxrQE_hBTO46WqQT3CLOvdy5q_Y';
+// ════════════════════════════════════════════════════
+
+const {useState,useEffect}=React,h=React.createElement;
+const ACCENT='#7C5CB5';
+const isConfigured=()=>SUPABASE_URL.startsWith('http');
+
+const sbH=()=>({'Content-Type':'application/json','apikey':SUPABASE_KEY,'Authorization':`Bearer ${SUPABASE_KEY}`});
+const sbSave=async(norm,pt,name,dept)=>{const r=await fetch(`${SUPABASE_URL}/rest/v1/disc_results`,{method:'POST',headers:sbH(),body:JSON.stringify({norm_d:norm.D,norm_i:norm.I,norm_s:norm.S,norm_c:norm.C,primary_type:pt,name:name||'',department:dept||''})});if(!r.ok)throw new Error();};
+const sbLoad=async()=>{const r=await fetch(`${SUPABASE_URL}/rest/v1/disc_results?select=id,norm_d,norm_i,norm_s,norm_c,primary_type,name,department,created_at&order=created_at.desc`,{headers:sbH()});const d=await r.json();if(!Array.isArray(d))throw new Error();return d.map(x=>({id:x.id,norm:{D:x.norm_d,I:x.norm_i,S:x.norm_s,C:x.norm_c},primaryType:x.primary_type,name:x.name||'',department:x.department||'',ts:new Date(x.created_at).getTime()}));};
+const sbDel=async(id)=>fetch(`${SUPABASE_URL}/rest/v1/disc_results?id=eq.${id}`,{method:'DELETE',headers:sbH()});
+const sbDelAll=async()=>fetch(`${SUPABASE_URL}/rest/v1/disc_results?primary_type=in.(D,I,S,C)`,{method:'DELETE',headers:sbH()});
+
+const QS=[
+  {id:1,q:'新しいプロジェクトやアイデアを立ち上げることが好きですか？',t:'D'},{id:2,q:'新しい人との出会いを楽しむことがありますか？',t:'I'},{id:3,q:'大きなグループでの仕事を好みますか？',t:'I'},{id:4,q:'他者の指示に従ってタスクを遂行することが得意ですか？',t:'S'},{id:5,q:'他者の意見よりも自分の考えを重視しますか？',t:'D'},{id:6,q:'社交的な環境で活動するのが好きですか？',t:'I'},{id:7,q:'詳細な計画を立てるのが好きですか？',t:'C'},{id:8,q:'長期的な目標を持って行動しますか？',t:'D'},{id:9,q:'新しいチャレンジに興味がありますか？',t:'D'},{id:10,q:'新しいアイデアや提案を積極的に受け入れますか？',t:'I'},
+  {id:11,q:'変化に対して柔軟性がありますか？',t:'I'},{id:12,q:'組織やプロセスの改善を提案することがありますか？',t:'C'},{id:13,q:'自分の目標に向かって行動しますか？',t:'D'},{id:14,q:'他者の意見やアドバイスを尊重しますか？',t:'S'},{id:15,q:'安定した環境での仕事を好むことがありますか？',t:'S'},{id:16,q:'データや情報を集めて分析することが好きですか？',t:'C'},{id:17,q:'目標達成のためにリスクを取りますか？',t:'D'},{id:18,q:'他者の感情に敏感ですか？',t:'S'},{id:19,q:'責任を持って自分の役割を果たしますか？',t:'S'},{id:20,q:'規則や手順に厳密に従いますか？',t:'C'},
+  {id:21,q:'リーダーとして他者を指導することがありますか？',t:'D'},{id:22,q:'グループの雰囲気を明るくしますか？',t:'I'},{id:23,q:'グループの調和を保ちますか？',t:'S'},{id:24,q:'実績や成果に対する評価を重視しますか？',t:'D'},{id:25,q:'他者の意見に反対することが多いですか？',t:'D'},{id:26,q:'チームのメンバーとの関係を大切にしますか？',t:'S'},{id:27,q:'社交的な場面で自信を持って行動しますか？',t:'I'},{id:28,q:'組織やプロセスの改善を提案しますか？',t:'C'},{id:29,q:'競争心が強いと感じますか？',t:'D'},{id:30,q:'ポジティブな雰囲気を作り出すのが得意ですか？',t:'I'},
+  {id:31,q:'自分の意見を柔軟に変えますか？',t:'S'},{id:32,q:'分析力が高く、論理的に問題を解決することができますか？',t:'C'},{id:33,q:'問題解決に積極的ですか？',t:'D'},{id:34,q:'他人のニーズや感情に配慮しますか？',t:'S'},{id:35,q:'チームの一体感を促進することがありますか？',t:'S'},{id:36,q:'詳細な計画やスケジュールを立てるのが好きですか？',t:'C'},{id:37,q:'大きな決断を下すことが得意ですか？',t:'D'},{id:38,q:'新しいアイデアやチャレンジに興味がありますか？',t:'I'},{id:39,q:'穏やかな雰囲気を作り出すのが得意ですか？',t:'S'},{id:40,q:'規則や手順に従い、正しい方法で作業を行いますか？',t:'C'},
+  {id:41,q:'自分の意見をはっきり述べることがありますか？',t:'D'},{id:42,q:'イベントや会議で積極的に参加しますか？',t:'I'},{id:43,q:'他者をサポートすることが得意ですか？',t:'S'},{id:44,q:'組織の目標に貢献しますか？',t:'S'},{id:45,q:'自分の意志を通すことがありますか？',t:'D'},{id:46,q:'グループの士気を高めることがありますか？',t:'I'},{id:47,q:'詳細な計画を立てるのが得意ですか？',t:'C'},{id:48,q:'責任を持つことを好みますか？',t:'D'},{id:49,q:'目標に向かって行動するのが好きですか？',t:'D'},{id:50,q:'他者との関係を築くのが得意ですか？',t:'I'},
+];
+const DISC={
+  D:{name:'主導型',full:'Dominance',color:'#5CA882',bg:'#EAF5EE',txt:'#27500A',axis:'ペース速い × タスク指向',kw:['成果','行動','挑戦'],desc:'結果志向で意思決定が速く、チャレンジを積極的に求めます。目標達成のために力強くリードします。',strengths:['強いリーダーシップ','迅速な意思決定','目標達成への強い意欲','直接的なコミュニケーション'],growth:['他者の意見をより傾聴する','忍耐力を養う','プロセスを大切にする','感情面への配慮を高める']},
+  I:{name:'感化型',full:'Influence',color:'#E87055',bg:'#FDEEE9',txt:'#7A2E1F',axis:'ペース速い × 人指向',kw:['行動','熱意'],desc:'人々を鼓舞しポジティブな雰囲気を生み出します。社交的でコミュニケーション能力が高く、周囲を巻き込む力があります。',strengths:['優れたコミュニケーション力','楽観的でポジティブな姿勢','説得力と感化力','チームの士気を高める力'],growth:['詳細への注意を高める','フォローアップを徹底する','現実的な視点を持つ','長期的な集中力を維持する']},
+  S:{name:'安定型',full:'Steadiness',color:'#4A9BC0',bg:'#E5F3FA',txt:'#0C3E58',axis:'ペースゆっくり × 人指向',kw:['協力','支援','着実'],desc:'安定と調和を重視しチームを誠実にサポートします。信頼性が高く周囲に安心感を与えます。',strengths:['高い信頼性と誠実さ','優れたチームワーク','忍耐力と粘り強さ','安定した一貫した作業品質'],growth:['変化への適応力を高める','自己主張を強める','意思決定のスピードアップ','新しいことに挑戦する']},
+  C:{name:'慎重型',full:'Conscientiousness',color:'#C8A020',bg:'#FBF4DC',txt:'#5A3D00',axis:'ペースゆっくり × タスク指向',kw:['正確','着実'],desc:'品質と正確さを重視し体系的なアプローチで問題を解決します。高い基準を常に維持します。',strengths:['卓越した分析力','高い精度と品質意識','体系的な問題解決','リスク評価能力'],growth:['意思決定のスピードを上げる','完璧主義を和らげる','批判への対処力を高める','人間関係をより大切にする']},
+};
+const TYPES=['D','I','S','C'],PS=5,TP=10;
+
+const getPt=n=>TYPES.reduce((a,b)=>n[a]>n[b]?a:b);
+const lsGet=(k,d)=>{try{const v=localStorage.getItem(k);return v?JSON.parse(v):d;}catch(e){return d;}};
+const lsSet=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}};
+const clip=async t=>{try{await navigator.clipboard.writeText(t);}catch(e){const el=document.createElement('textarea');el.value=t;document.body.appendChild(el);el.select();document.execCommand('copy');document.body.removeChild(el);}};
+const calcDot=(norm,cx,cy,r)=>{const{D,I,S,C}=norm,dx=I+S-D-C,dy=S+C-D-I,mV=200,sx=cx+(dx/mV)*r*0.72,sy=cy+(dy/mV)*r*0.72,dist=Math.sqrt((sx-cx)**2+(sy-cy)**2),cap=r*0.85;if(dist>cap){const f=cap/dist;return[cx+(sx-cx)*f,cy+(sy-cy)*f];}return[sx,sy];};
+
+// ─── ホイール ───
+function VL({x,chars,cy,fs}){const lh=fs*1.45,th=(chars.length-1)*lh,sy=cy-th/2;return h('text',{textAnchor:'middle',fontSize:fs,fill:'#888',opacity:0.85,fontWeight:'500'},chars.map((c,i)=>h('tspan',{key:i,x,y:sy+i*lh},c)));}
+function Wheel({normScores,highlight,allDots}){
+  const cx=220,cy=220,r=138;
+  const xy=(d,rad)=>{const a=d*Math.PI/180;return[cx+rad*Math.sin(a),cy-rad*Math.cos(a)];};
+  const arc=(s,e,R)=>{const[x1,y1]=xy(s,R),[x2,y2]=xy(e,R),lg=(e-s)>180?1:0;return`M ${cx} ${cy} L ${x1.toFixed(1)} ${y1.toFixed(1)} A ${R} ${R} 0 ${lg} 1 ${x2.toFixed(1)} ${y2.toFixed(1)} Z`;};
+  const secs=[{s:270,e:300,l:'Dc',c:'#7DC4A0',b:false,t:'D'},{s:300,e:330,l:'D',c:'#5CA882',b:true,t:'D'},{s:330,e:360,l:'Di',c:'#7DC4A0',b:false,t:'D'},{s:0,e:30,l:'Id',c:'#F09070',b:false,t:'I'},{s:30,e:60,l:'I',c:'#E87055',b:true,t:'I'},{s:60,e:90,l:'Is',c:'#F09070',b:false,t:'I'},{s:90,e:120,l:'Si',c:'#6DAECB',b:false,t:'S'},{s:120,e:150,l:'S',c:'#4A9BC0',b:true,t:'S'},{s:150,e:180,l:'Sc',c:'#6DAECB',b:false,t:'S'},{s:180,e:210,l:'Cs',c:'#D4B040',b:false,t:'C'},{s:210,e:240,l:'C',c:'#C8A020',b:true,t:'C'},{s:240,e:270,l:'Cd',c:'#D4B040',b:false,t:'C'}];
+  const kws=[{t:'行動',a:0},{t:'熱意',a:45},{t:'協力',a:90},{t:'支援',a:135},{t:'着実',a:180},{t:'正確',a:225},{t:'挑戦',a:270},{t:'成果',a:315}];
+  const mDot=normScores?calcDot(normScores,cx,cy,r):null;
+  return h('svg',{width:'100%',viewBox:'0 0 440 440',style:{maxWidth:380,display:'block',margin:'0 auto'}},
+    h(VL,{x:14,chars:['タ','ス','ク','指','向'],cy:220,fs:12}),h(VL,{x:426,chars:['人','指','向'],cy:220,fs:12}),
+    ...secs.map((s,i)=>h('path',{key:i,d:arc(s.s,s.e,r),fill:s.c,stroke:'white',strokeWidth:1.5,opacity:highlight&&s.t!==highlight?0.25:1})),
+    ...secs.map((s,i)=>{const mid=(s.s+s.e)/2,[lx,ly]=xy(mid,r*0.73),dim=highlight&&s.t!==highlight;return h('text',{key:'sl'+i,x:lx,y:ly,textAnchor:'middle',dominantBaseline:'central',fontSize:s.b?13:10,fontWeight:s.b?'700':'400',fill:'white',opacity:dim?0.15:1},s.l);}),
+    ...[{t:'D',a:315},{t:'I',a:45},{t:'S',a:135},{t:'C',a:225}].map(({t,a})=>{const[lx,ly]=xy(a,r*0.38),dim=highlight&&t!==highlight;return h('text',{key:'m'+t,x:lx,y:ly,textAnchor:'middle',dominantBaseline:'central',fontSize:38,fontWeight:'700',fill:'white',opacity:dim?0.1:0.88},t);}),
+    ...kws.map((k,i)=>{const[lx,ly]=xy(k.a,170);return h('text',{key:'ok'+i,x:lx,y:ly,textAnchor:'middle',dominantBaseline:'central',fontSize:12,fontWeight:'600',fill:'#1a1a1a',opacity:0.7},k.t);}),
+    h('circle',{cx,cy,r:7,fill:'white',opacity:0.2}),
+    allDots&&allDots.map((d,i)=>{const[dx,dy]=calcDot(d.norm,cx,cy,r);return h('circle',{key:'ad'+i,cx:dx,cy:dy,r:7,fill:DISC[d.primaryType].color,stroke:'white',strokeWidth:1.5,opacity:0.75});}),
+    mDot&&[h('circle',{key:'sh',cx:mDot[0]+2,cy:mDot[1]+2,r:12,fill:'rgba(0,0,0,0.2)'}),h('circle',{key:'d',cx:mDot[0],cy:mDot[1],r:11,fill:'#1a1a1a',stroke:'white',strokeWidth:3}),h('circle',{key:'i',cx:mDot[0],cy:mDot[1],r:4.5,fill:'white'})]
+  );
+}
+
+// ─── セットアップガイド ───
+const SQL=`CREATE TABLE disc_results (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  norm_d integer NOT NULL,
+  norm_i integer NOT NULL,
+  norm_s integer NOT NULL,
+  norm_c integer NOT NULL,
+  primary_type text NOT NULL,
+  created_at timestamptz DEFAULT now()
+);
+ALTER TABLE disc_results ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "ins" ON disc_results FOR INSERT WITH CHECK (true);
+CREATE POLICY "sel" ON disc_results FOR SELECT USING (true);
+CREATE POLICY "del" ON disc_results FOR DELETE USING (true);`;
+
+function SetupGuide(){
+  const[step,setStep]=useState(0);
+  const[sqlOk,setSqlOk]=useState(false);
+  const steps=[
+    {icon:'🌐',title:'Supabaseでアカウント作成',body:h('div',null,
+      h('p',{style:{color:'#555',fontSize:14,lineHeight:1.7,marginBottom:14}},'Supabaseは無料のデータベースサービスです。'),
+      h('a',{href:'https://supabase.com',target:'_blank',style:{display:'block',padding:'12px',background:ACCENT,color:'white',borderRadius:10,textAlign:'center',textDecoration:'none',fontWeight:500,fontSize:15,marginBottom:14}},'supabase.com を開く →'),
+      h('ol',{style:{paddingLeft:18,color:'#555',fontSize:13,lineHeight:2.3}},
+        h('li',null,'「Start your project」→ GitHubでログイン'),
+        h('li',null,'「New project」→ 名前・パスワード入力'),
+        h('li',null,'リージョン: ',h('code',null,'Northeast Asia (Tokyo)'))
+      )
+    )},
+    {icon:'🗄️',title:'テーブルをSQLで作成',body:h('div',null,
+      h('p',{style:{color:'#555',fontSize:13,lineHeight:1.6,marginBottom:10}},'Supabase ダッシュボードの「SQL Editor」を開き、以下をコピーして実行してください。'),
+      h('pre',null,SQL),
+      h('button',{onClick:async()=>{await clip(SQL);setSqlOk(true);setTimeout(()=>setSqlOk(false),2000);},style:{marginTop:10,padding:'8px 16px',background:sqlOk?'#EAF5EE':'#f0eef8',color:sqlOk?'#27500A':ACCENT,border:`0.5px solid ${sqlOk?'#5CA882':ACCENT+'60'}`,borderRadius:8,fontSize:13,cursor:'pointer',fontWeight:500}},sqlOk?'✓ コピー済み':'SQLをコピー')
+    )},
+    {icon:'🔑',title:'APIキーを取得',body:h('div',null,
+      h('ol',{style:{paddingLeft:18,color:'#555',fontSize:13,lineHeight:2.3}},
+        h('li',null,'左メニュー「Settings」→「API」'),
+        h('li',null,h('b',null,'Project URL'),' をコピー'),
+        h('li',null,h('b',null,'anon / public'),' キーをコピー')
+      )
+    )},
+    {icon:'📝',title:'HTMLファイルに貼り付け',body:h('div',null,
+      h('p',{style:{color:'#555',fontSize:13,lineHeight:1.6,marginBottom:10}},'ダウンロードした ',h('code',null,'disc_assessment.html'),' をメモ帳などで開き、冒頭2行を書き換えます:'),
+      h('pre',null,`const SUPABASE_URL = 'https://xxx.supabase.co';\nconst SUPABASE_KEY = 'eyJhbGci...';`)
+    )},
+    {icon:'🚀',title:'Netlifyでデプロイ',body:h('div',null,
+      h('a',{href:'https://app.netlify.com/drop',target:'_blank',style:{display:'block',padding:'12px',background:'#00AD9F',color:'white',borderRadius:10,textAlign:'center',textDecoration:'none',fontWeight:500,fontSize:15,marginBottom:12}},'Netlify Drop を開く →'),
+      h('p',{style:{color:'#555',fontSize:13,lineHeight:1.7}},'設定済みのHTMLファイルをドラッグ＆ドロップするだけで、数秒でURLが発行されます（無料・アカウント不要）。'),
+      h('div',{style:{marginTop:12,padding:'10px 14px',background:'#EAF5EE',borderRadius:8,border:'0.5px solid #5CA88240',color:'#27500A',fontSize:13,lineHeight:1.7}},
+        '✅ 設定完了後、ページをリロードすると診断画面が表示されます。'
+      )
+    )},
+  ];
+  const s=steps[step];
+  return h('div',{style:{maxWidth:520,margin:'0 auto',padding:'1.5rem 1rem'}},
+    h('div',{style:{display:'flex',alignItems:'center',gap:10,marginBottom:'1.5rem'}},
+      h('div',{style:{width:36,height:36,borderRadius:8,background:ACCENT,display:'flex',alignItems:'center',justifyContent:'center',color:'white',fontWeight:600,fontSize:16}},'D'),
+      h('div',null,h('div',{style:{fontSize:20,fontWeight:500}},'DISC 行動特性診断'),h('div',{style:{fontSize:12,color:'#888'}},'初期セットアップ'))
+    ),
+    h('div',{style:{display:'flex',gap:4,marginBottom:'1.5rem'}},steps.map((_,i)=>h('div',{key:i,style:{flex:1,height:4,borderRadius:2,background:i<=step?ACCENT:'#e8e8ec',transition:'background 0.3s'}}))),
+    h('div',{style:{background:'#fff',borderRadius:14,border:'0.5px solid #e8e8ec',padding:'1.25rem',marginBottom:'1.25rem',minHeight:200}},
+      h('div',{style:{display:'flex',alignItems:'center',gap:8,marginBottom:'1rem'}},
+        h('span',{style:{fontSize:22}},s.icon),
+        h('div',null,h('div',{style:{fontSize:11,color:'#888'}},`ステップ ${step+1} / ${steps.length}`),h('div',{style:{fontSize:16,fontWeight:500}},s.title))
+      ),
+      s.body
+    ),
+    h('div',{style:{display:'flex',gap:8}},
+      step>0&&h('button',{onClick:()=>setStep(p=>p-1),style:{flex:1,padding:'11px',background:'transparent',border:'0.5px solid #d8d8dc',borderRadius:8,fontSize:14,color:'#666',cursor:'pointer'}},'← 前へ'),
+      step<steps.length-1
+        ?h('button',{onClick:()=>setStep(p=>p+1),style:{flex:1,padding:'11px',background:ACCENT,color:'white',border:'none',borderRadius:8,fontSize:14,fontWeight:500,cursor:'pointer'}},'次へ →')
+        :h('button',{onClick:()=>location.reload(),style:{flex:1,padding:'11px',background:'#5CA882',color:'white',border:'none',borderRadius:8,fontSize:14,fontWeight:500,cursor:'pointer'}},'✅ 設定完了 → 再読み込み')
+    )
+  );
+}
+
+// ─── 個別結果 ───
+function IndividualResult({result,index,onBack}){
+  const{norm,primaryType,ts}=result,info=DISC[primaryType];
+  const date=ts?new Date(ts).toLocaleDateString('ja-JP',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}):'';
+  return h('div',{style:{maxWidth:560,margin:'0 auto',padding:'1rem'}},
+    h('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'1.25rem'}},
+      h('div',{style:{display:'flex',alignItems:'center',gap:10}},
+        h('div',{style:{width:40,height:40,borderRadius:10,background:info.color,display:'flex',alignItems:'center',justifyContent:'center',color:'white',fontWeight:700,fontSize:18}},primaryType),
+        h('div',null,h('div',{style:{fontSize:15,fontWeight:500}},result.name||('回答者 '+index)),h('div',{style:{display:'flex',gap:6,alignItems:'center',marginTop:2}},result.department&&h('span',{style:{fontSize:11,background:'#f0eef8',color:'#7C5CB5',padding:'1px 7px',borderRadius:10}},result.department),h('span',{style:{fontSize:11,color:'#666'}},info.name+(date?' · '+date:''))))
+      ),
+      h('button',{onClick:onBack,style:{padding:'6px 14px',background:'transparent',border:'0.5px solid #d8d8dc',borderRadius:8,fontSize:13,color:'#666',cursor:'pointer'}},'← 一覧へ')
+    ),
+    h('div',{style:{borderRadius:16,overflow:'hidden',border:'0.5px solid #e8e8ec',marginBottom:'1.25rem',background:'#fff',padding:'4px 0'}},
+      h(Wheel,{normScores:norm,highlight:primaryType}),
+      h('div',{style:{padding:'12px 16px',borderTop:'0.5px solid #e8e8ec'}},
+        h('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}},TYPES.map(t=>{const ti=DISC[t],ip=t===primaryType;return h('div',{key:t,style:{display:'flex',alignItems:'center',gap:7}},h('div',{style:{width:22,height:22,borderRadius:4,background:ti.bg,display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:600,color:ti.color,border:`1px solid ${ti.color}${ip?'':'55'}`,flexShrink:0}},t),h('div',{style:{flex:1}},h('div',{style:{height:3,background:'#e8e8ec',borderRadius:2}},h('div',{style:{height:'100%',width:norm[t]+'%',background:ti.color,borderRadius:2}}))),h('div',{style:{fontSize:11,fontWeight:ip?600:400,color:ti.color,minWidth:32,textAlign:'right'}},norm[t]+'%'));}))
+      )
+    ),
+    h('div',{style:{padding:'1rem',borderRadius:10,border:`0.5px solid ${info.color}50`,background:info.bg,marginBottom:'1.25rem'}},
+      h('div',{style:{display:'flex',gap:6,marginBottom:8}},info.kw.map((k,i)=>h('span',{key:i,style:{padding:'3px 10px',borderRadius:20,background:info.color,color:'white',fontSize:12,fontWeight:500}},k))),
+      h('p',{style:{fontSize:14,color:info.txt,lineHeight:1.7,margin:0}},info.desc)
+    ),
+    h('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}},
+      h('div',{style:{padding:'1rem',borderRadius:10,border:'0.5px solid #e8e8ec',background:'#fff'}},h('div',{style:{fontSize:12,fontWeight:500,color:'#666',marginBottom:8}},'強み'),info.strengths.map((s,i)=>h('div',{key:i,style:{display:'flex',gap:6,marginBottom:6,alignItems:'flex-start'}},h('span',{style:{color:info.color,fontSize:13,lineHeight:1.5,flexShrink:0}},'✓'),h('span',{style:{fontSize:12,lineHeight:1.5}},s)))),
+      h('div',{style:{padding:'1rem',borderRadius:10,border:'0.5px solid #e8e8ec',background:'#fff'}},h('div',{style:{fontSize:12,fontWeight:500,color:'#666',marginBottom:8}},'成長のポイント'),info.growth.map((g,i)=>h('div',{key:i,style:{display:'flex',gap:6,marginBottom:6,alignItems:'flex-start'}},h('span',{style:{color:'#C8A020',fontSize:13,lineHeight:1.5,flexShrink:0}},'→'),h('span',{style:{fontSize:12,lineHeight:1.5}},g))))
+    )
+  );
+}
+
+// ─── 集計 ───
+function AggregateContent({onBack}){
+  const[results,setResults]=useState([]);
+  const[loading,setLoading]=useState(true);
+  const[err,setErr]=useState('');
+  const[selected,setSelected]=useState(null);
+  const[confirm,setConfirm]=useState(false);
+  const[showPwEdit,setShowPwEdit]=useState(false);
+  const[newPw,setNewPw]=useState('');
+  useEffect(()=>{load();},[]);
+  const load=async()=>{setLoading(true);setErr('');try{setResults(await sbLoad());}catch(e){setErr('読み込みに失敗しました。Supabaseの設定を確認してください。');}setLoading(false);};
+  const delOne=async(id)=>{await sbDel(id);setResults(r=>r.filter(x=>x.id!==id));};
+  const delAll=async()=>{await sbDelAll();setResults([]);setConfirm(false);};
+
+  if(showPwEdit)return h('div',{style:{maxWidth:400,margin:'4rem auto',padding:'1.5rem 1rem'}},
+    h('div',{style:{background:'#fff',borderRadius:16,padding:'1.5rem',border:'0.5px solid #e8e8ec'}},
+      h('div',{style:{fontSize:16,fontWeight:500,marginBottom:12}},'🔑 パスワード変更'),
+      h('div',{style:{fontSize:13,color:'#666',marginBottom:12}},'現在: '+lsGet('disc_admin_pw','DISC2024')),
+      h('input',{value:newPw,onChange:e=>setNewPw(e.target.value),placeholder:'新しいパスワード（英数字）',style:{width:'100%',padding:'10px 12px',borderRadius:8,border:'1.5px solid #d8d8dc',fontSize:14,outline:'none',marginBottom:12}}),
+      h('div',{style:{display:'flex',gap:8}},
+        h('button',{onClick:()=>{if(newPw.trim()){lsSet('disc_admin_pw',newPw.toUpperCase().trim());alert('変更しました: '+newPw.toUpperCase().trim());setNewPw('');setShowPwEdit(false);}},style:{flex:1,padding:'10px',background:'#7C5CB5',color:'white',border:'none',borderRadius:8,fontSize:13,cursor:'pointer'}},'保存'),
+        h('button',{onClick:()=>setShowPwEdit(false),style:{flex:1,padding:'10px',background:'transparent',border:'0.5px solid #d8d8dc',borderRadius:8,fontSize:13,cursor:'pointer'}},'キャンセル')
+      )
+    )
+  );
+  if(selected!==null)return h(IndividualResult,{result:results[selected],index:results.length-selected,onBack:()=>setSelected(null)});
+  const counts=TYPES.reduce((a,t)=>({...a,[t]:results.filter(r=>r.primaryType===t).length}),{});
+  const total=results.length;
+  return h('div',{style:{maxWidth:560,margin:'0 auto',padding:'1rem'}},
+    h('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'1.25rem'}},
+      h('h2',{style:{margin:0,fontSize:20,fontWeight:500}},'DISC 集計結果'),
+      h('div',{style:{display:'flex',gap:8}},
+        h('button',{onClick:load,style:{padding:'6px 12px',background:'transparent',border:'0.5px solid #d8d8dc',borderRadius:8,fontSize:12,color:'#666',cursor:'pointer'}},'↻ 更新'),
+        h('button',{onClick:onBack,style:{padding:'6px 14px',background:'transparent',border:'0.5px solid #d8d8dc',borderRadius:8,fontSize:13,color:'#666',cursor:'pointer'}},'← トップへ'),
+        h('button',{onClick:()=>setShowPwEdit(true),style:{padding:'6px 14px',background:'transparent',border:'0.5px solid #d8d8dc',borderRadius:8,fontSize:13,color:'#666',cursor:'pointer'}},'🔑 PW変更')
+      )
+    ),
+    loading?h('div',{style:{textAlign:'center',padding:'3rem',color:'#999'}},'読み込み中...'):
+    err?h('div',{style:{padding:'1rem',background:'#fff0f0',borderRadius:12,color:'#c00',fontSize:13}},err):
+    total===0?h('div',{style:{textAlign:'center',padding:'3rem',color:'#999'}},h('div',{style:{fontSize:14}},'まだ回答がありません')):
+    h('div',null,
+      h('div',{style:{display:'grid',gridTemplateColumns:'auto 1fr 1fr 1fr 1fr',gap:8,marginBottom:'1rem'}},
+        h('div',{style:{padding:'10px 14px',borderRadius:8,background:'#f2f2f7',display:'flex',flexDirection:'column',justifyContent:'center'}},h('div',{style:{fontSize:11,color:'#666',marginBottom:2}},'総回答'),h('div',{style:{fontSize:22,fontWeight:600}},total)),
+        ...TYPES.map(t=>h('div',{key:t,style:{padding:'10px 12px',borderRadius:8,background:DISC[t].bg,border:`0.5px solid ${DISC[t].color}40`}},h('div',{style:{fontSize:11,fontWeight:600,color:DISC[t].color,marginBottom:2}},t),h('div',{style:{fontSize:20,fontWeight:600,color:DISC[t].txt}},counts[t]),h('div',{style:{fontSize:11,color:DISC[t].txt,opacity:0.7}},Math.round(counts[t]/total*100)+'%')))
+      ),
+      h('div',{style:{borderRadius:16,overflow:'hidden',border:'0.5px solid #e8e8ec',marginBottom:'1rem',background:'#fff',padding:'4px 0'}},h(Wheel,{normScores:null,highlight:null,allDots:results})),
+      h('div',{style:{marginBottom:'1rem'}},
+        h('div',{style:{fontSize:13,fontWeight:500,color:'#666',marginBottom:8}},'回答者一覧　',h('span',{style:{fontSize:11,fontWeight:400}},'タップして個別結果を見る')),
+        h('div',{style:{display:'flex',flexDirection:'column',gap:6}},
+          results.map((r,i)=>{const ti=DISC[r.primaryType],num=results.length-i,date=new Date(r.ts).toLocaleDateString('ja-JP',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'});
+            return h('div',{key:r.id||i,onClick:()=>setSelected(i),style:{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',borderRadius:10,border:'0.5px solid #e8e8ec',background:'#fff',cursor:'pointer'},onMouseEnter:e=>e.currentTarget.style.background='#f5f5f7',onMouseLeave:e=>e.currentTarget.style.background='#fff'},
+              h('div',{style:{width:32,height:32,borderRadius:8,background:ti.bg,display:'flex',alignItems:'center',justifyContent:'center',fontSize:15,fontWeight:700,color:ti.color,flexShrink:0,border:`1px solid ${ti.color}50`}},r.primaryType),
+              h('div',{style:{flex:1}},
+                h('div',{style:{display:'flex',alignItems:'center',gap:6,marginBottom:4,flexWrap:'wrap'}},h('span',{style:{fontSize:13,fontWeight:600,color:'#1a1a1a'}},r.name||'名前なし'),r.department&&h('span',{style:{fontSize:11,background:'#f0eef8',color:'#7C5CB5',padding:'1px 7px',borderRadius:10,fontWeight:500}},r.department),h('span',{style:{fontSize:11,color:ti.color,fontWeight:500}},ti.name)),
+                h('div',{style:{display:'flex',gap:1,height:4,borderRadius:2,overflow:'hidden'}},TYPES.map(t=>h('div',{key:t,style:{flex:r.norm[t],background:DISC[t].color,opacity:t===r.primaryType?1:0.4}})))
+              ),
+              h('div',{style:{display:'flex',alignItems:'center',gap:8,flexShrink:0}},
+                h('div',{style:{fontSize:11,color:'#999'}},date),
+                h('button',{onClick:e=>{e.stopPropagation();delOne(r.id);},style:{padding:'3px 8px',background:'transparent',border:'0.5px solid #e8e8ec',borderRadius:6,fontSize:11,color:'#bbb',cursor:'pointer'}},'削除'),
+                h('span',{style:{fontSize:14,color:'#ccc'}},'›')
+              )
+            );
+          })
+        )
+      ),
+      confirm
+        ?h('div',{style:{display:'flex',gap:8}},h('button',{onClick:delAll,style:{flex:1,padding:'10px',background:'#E24B4A',color:'white',border:'none',borderRadius:8,fontSize:13,cursor:'pointer'}},'全データ削除する'),h('button',{onClick:()=>setConfirm(false),style:{flex:1,padding:'10px',background:'transparent',border:'0.5px solid #d8d8dc',borderRadius:8,fontSize:13,cursor:'pointer'}},'取消'))
+        :h('button',{onClick:()=>setConfirm(true),style:{padding:'9px 16px',background:'transparent',border:'0.5px solid #e8e8ec',borderRadius:8,fontSize:12,cursor:'pointer',color:'#bbb'}},'全データ消去')
+    )
+  );
+}
+
+// ─── パスワードゲート ───
+function PasswordGate({onUnlock,onBack}){
+  const[input,setInput]=useState('');
+  const[err,setErr]=useState(false);
+  const pw=lsGet('disc_admin_pw','DISC2024');
+  const verify=()=>{if(input.toUpperCase().trim()===pw.toUpperCase()){onUnlock();}else{setErr(true);}};
+  return h('div',{style:{maxWidth:400,margin:'0 auto',padding:'1.5rem 1rem'}},
+    h('button',{onClick:onBack,style:{padding:'6px 14px',background:'transparent',border:'0.5px solid #d8d8dc',borderRadius:8,fontSize:13,color:'#666',cursor:'pointer',marginBottom:'2rem'}},'← 戻る'),
+    h('div',{style:{textAlign:'center',marginBottom:'2rem'}},h('div',{style:{fontSize:36,marginBottom:12}},'🔒'),h('div',{style:{fontSize:18,fontWeight:500,marginBottom:6}},'集計ページ'),h('div',{style:{fontSize:13,color:'#666'}},'管理者パスワードを入力してください')),
+    h('input',{value:input,onChange:e=>setInput(e.target.value),onKeyDown:e=>e.key==='Enter'&&verify(),placeholder:'パスワード',style:{width:'100%',padding:'14px',borderRadius:10,border:`1.5px solid ${err?'#E24B4A':ACCENT+'60'}`,fontSize:18,textAlign:'center',letterSpacing:'0.15em',fontWeight:600,outline:'none',marginBottom:err?8:16},autoFocus:true}),
+    err&&h('div',{style:{fontSize:13,color:'#E24B4A',textAlign:'center',marginBottom:16}},'パスワードが違います'),
+    h('button',{onClick:verify,disabled:!input.trim(),style:{width:'100%',padding:'13px',background:ACCENT,color:'white',border:'none',borderRadius:10,fontSize:15,fontWeight:500,cursor:!input.trim()?'not-allowed':'pointer',opacity:!input.trim()?0.6:1}},'集計ページへ →')
+  );
+}
+
+// ─── 管理者モーダル ───
+function AdminModal({onClose}){
+  const[pw,setPw]=useState(()=>lsGet('disc_admin_pw','DISC2024'));
+  const[editing,setEditing]=useState(false);
+  const[newPw,setNewPw]=useState('');
+  const[copied,setCopied]=useState(false);
+  const savePw=()=>{if(newPw.trim()){const p=newPw.toUpperCase().trim();lsSet('disc_admin_pw',p);setPw(p);setEditing(false);setNewPw('');}};
+  const copy=async()=>{await clip(pw);setCopied(true);setTimeout(()=>setCopied(false),2000);};
+  return h('div',{style:{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:100,padding:'1rem'},onClick:onClose},
+    h('div',{style:{background:'#fff',borderRadius:16,padding:'1.5rem',maxWidth:360,width:'100%',boxShadow:'0 8px 32px rgba(0,0,0,0.2)'},onClick:e=>e.stopPropagation()},
+      h('div',{style:{fontSize:16,fontWeight:500,marginBottom:4}},'🔑 管理者パスワード'),
+      h('div',{style:{fontSize:13,color:'#666',marginBottom:'1.25rem',lineHeight:1.6}},'集計ページにアクセスする際に必要なパスワードです。'),
+      h('div',{style:{background:'#F5F0FF',borderRadius:10,padding:'1rem',marginBottom:'1.25rem',textAlign:'center'}},
+        editing
+          ?h('div',{style:{display:'flex',gap:8}},h('input',{value:newPw,onChange:e=>setNewPw(e.target.value),placeholder:'新しいパスワード',style:{flex:1,padding:'8px 12px',borderRadius:8,border:`1.5px solid ${ACCENT}50`,fontSize:14,outline:'none'}}),h('button',{onClick:savePw,style:{padding:'8px 12px',background:ACCENT,color:'white',border:'none',borderRadius:8,fontSize:13,cursor:'pointer'}},'保存'),h('button',{onClick:()=>setEditing(false),style:{padding:'8px 10px',background:'transparent',border:'0.5px solid #d8d8dc',borderRadius:8,fontSize:13,cursor:'pointer'}},'✕'))
+          :h('div',null,
+              h('div',{style:{fontSize:28,fontWeight:700,letterSpacing:'0.2em',color:'#1a1a1a',fontFamily:'monospace',marginBottom:10}},pw),
+              h('div',{style:{display:'flex',gap:8,justifyContent:'center'}},
+                h('button',{onClick:copy,style:{padding:'6px 14px',borderRadius:8,border:`0.5px solid ${copied?'#5CA882':ACCENT+'60'}`,background:copied?'#EAF5EE':'white',color:copied?'#27500A':ACCENT,fontSize:12,cursor:'pointer',fontWeight:500}},copied?'✓ コピー済み':'コピー'),
+                h('button',{onClick:()=>setEditing(true),style:{padding:'6px 14px',borderRadius:8,border:'0.5px solid #d8d8dc',background:'white',color:'#666',fontSize:12,cursor:'pointer'}},'変更')
+              )
+            )
+      ),
+      h('div',{style:{fontSize:12,color:'#666',marginBottom:'1rem',lineHeight:1.8,padding:'10px 12px',background:'#f2f2f7',borderRadius:8}},
+        '【使い方】',h('br',null),'① 回答者にはこのURLをそのまま共有',h('br',null),'② 閲覧者には同じURL＋このパスワードを共有',h('br',null),'③ 回答は自動保存 → 閲覧者は集計ページで確認'
+      ),
+      h('button',{onClick:onClose,style:{width:'100%',padding:'10px',background:ACCENT,color:'white',border:'none',borderRadius:8,fontSize:14,cursor:'pointer',fontWeight:500}},'閉じる')
+    )
+  );
+}
+
+// ─── メインアプリ ───
+function App(){
+  if(!isConfigured())return h(SetupGuide,null);
+  const[screen,setScreen]=useState('intro');
+  const[page,setPage]=useState(0);
+  const[answers,setAnswers]=useState(Array(50).fill(null));
+  const[norm,setNorm]=useState(null);
+  const[saving,setSaving]=useState(false);
+  const[userInfo,setUserInfo]=useState({name:'',dept:''});
+  const[saveErr,setSaveErr]=useState(false);
+  
+  const[aggUnlocked,setAggUnlocked]=useState(false);
+  const pageQs=QS.slice(page*PS,(page+1)*PS),pageAns=answers.slice(page*PS,(page+1)*PS),pageOK=pageAns.every(a=>a!==null);
+  const answered=answers.filter(a=>a!==null).length;
+  const setAns=(qi,v)=>{const na=[...answers];na[page*PS+qi]=v;setAnswers(na);};
+  const calcNorm=()=>{const sums={D:0,I:0,S:0,C:0},cnts={D:0,I:0,S:0,C:0};QS.forEach((q,i)=>{sums[q.t]+=answers[i]||0;cnts[q.t]++;});const n={};TYPES.forEach(t=>{n[t]=Math.round((sums[t]/(cnts[t]*5))*100);});return n;};
+  const handleFinish=async()=>{
+    const n=calcNorm(),pt=getPt(n);setSaving(true);setSaveErr(false);
+    try{await sbSave(n,pt,userInfo.name,userInfo.dept);}catch(e){setSaveErr(true);}
+    setSaving(false);setNorm(n);setScreen('results');
+  };
+  const handleNext=()=>{if(page<TP-1){setPage(p=>p+1);}else{handleFinish();}};
+  const restart=()=>{setPage(0);setAnswers(Array(50).fill(null));setNorm(null);setScreen('intro');};
+
+  if(screen==='aggregate'){
+    if(!aggUnlocked)return h(PasswordGate,{onUnlock:()=>setAggUnlocked(true),onBack:()=>setScreen('intro')});
+    return h(AggregateContent,{onBack:()=>{setScreen('intro');setAggUnlocked(false);}});
+  }
+
+  if(screen==='results'&&norm){
+    const pt=getPt(norm),info=DISC[pt];
+    return h('div',{style:{maxWidth:560,margin:'0 auto',padding:'1.5rem 1rem'}},
+      h('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'1.25rem'}},
+        h('div',{style:{display:'flex',alignItems:'center',gap:10}},
+          h('div',{style:{width:40,height:40,borderRadius:10,background:info.color,display:'flex',alignItems:'center',justifyContent:'center',color:'white',fontWeight:700,fontSize:18}},pt),
+          h('div',null,h('div',{style:{fontSize:16,fontWeight:500}},'あなたは '+info.name+'です'),h('div',{style:{fontSize:12,color:'#666'}},info.full+' · '+info.axis))
+        ),
+        h('button',{onClick:restart,style:{padding:'6px 12px',background:'transparent',border:'0.5px solid #d8d8dc',borderRadius:8,fontSize:12,color:'#666',cursor:'pointer'}},'もう一度')
+      ),
+      saveErr
+        ?h('div',{style:{padding:'10px 14px',borderRadius:8,background:'#fff0f0',border:'0.5px solid #fcc',color:'#c00',fontSize:13,marginBottom:'1rem'}},'⚠️ 保存に失敗しました。')
+        :h('div',{style:{padding:'10px 14px',borderRadius:8,background:'#EAF5EE',border:'0.5px solid #5CA88240',color:'#27500A',fontSize:13,marginBottom:'1rem'}},saving?'💾 サーバーに保存中...':'✅ サーバーに保存されました（永続保存）'),
+      h('div',{style:{borderRadius:16,overflow:'hidden',border:'0.5px solid #e8e8ec',marginBottom:'1.25rem',background:'#fff',padding:'4px 0'}},
+        h(Wheel,{normScores:norm,highlight:pt}),
+        h('div',{style:{padding:'12px 16px',borderTop:'0.5px solid #e8e8ec'}},
+          h('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}},TYPES.map(t=>{const ti=DISC[t],ip=t===pt;return h('div',{key:t,style:{display:'flex',alignItems:'center',gap:7}},h('div',{style:{width:22,height:22,borderRadius:4,background:ti.bg,display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:600,color:ti.color,border:`1px solid ${ti.color}${ip?'':'55'}`,flexShrink:0}},t),h('div',{style:{flex:1}},h('div',{style:{height:3,background:'#e8e8ec',borderRadius:2}},h('div',{style:{height:'100%',width:norm[t]+'%',background:ti.color,borderRadius:2}}))),h('div',{style:{fontSize:11,fontWeight:ip?600:400,color:ti.color,minWidth:32,textAlign:'right'}},norm[t]+'%'));}))
+        )
+      ),
+      h('div',{style:{padding:'1rem',borderRadius:10,border:`0.5px solid ${info.color}50`,background:info.bg,marginBottom:'1.25rem'}},
+        h('div',{style:{display:'flex',gap:6,marginBottom:8}},info.kw.map((k,i)=>h('span',{key:i,style:{padding:'3px 10px',borderRadius:20,background:info.color,color:'white',fontSize:12,fontWeight:500}},k))),
+        h('p',{style:{fontSize:14,color:info.txt,lineHeight:1.7,margin:0}},info.desc)
+      ),
+      h('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}},
+        h('div',{style:{padding:'1rem',borderRadius:10,border:'0.5px solid #e8e8ec',background:'#fff'}},h('div',{style:{fontSize:12,fontWeight:500,color:'#666',marginBottom:8}},'強み'),info.strengths.map((s,i)=>h('div',{key:i,style:{display:'flex',gap:6,marginBottom:6,alignItems:'flex-start'}},h('span',{style:{color:info.color,fontSize:13,lineHeight:1.5,flexShrink:0}},'✓'),h('span',{style:{fontSize:12,lineHeight:1.5}},s)))),
+        h('div',{style:{padding:'1rem',borderRadius:10,border:'0.5px solid #e8e8ec',background:'#fff'}},h('div',{style:{fontSize:12,fontWeight:500,color:'#666',marginBottom:8}},'成長のポイント'),info.growth.map((g,i)=>h('div',{key:i,style:{display:'flex',gap:6,marginBottom:6,alignItems:'flex-start'}},h('span',{style:{color:'#C8A020',fontSize:13,lineHeight:1.5,flexShrink:0}},'→'),h('span',{style:{fontSize:12,lineHeight:1.5}},g))))
+      )
+    );
+  }
+
+
+  if(screen==='info')return h('div',{style:{maxWidth:480,margin:'0 auto',padding:'2rem 1rem'}},
+    h('div',{style:{display:'flex',alignItems:'center',gap:10,marginBottom:'1.5rem'}},
+      h('div',{style:{width:36,height:36,borderRadius:8,background:'#7C5CB5',display:'flex',alignItems:'center',justifyContent:'center',color:'white',fontWeight:600,fontSize:16}},'D'),
+      h('h2',{style:{margin:0,fontSize:20,fontWeight:500}},'回答者情報の入力')
+    ),
+    h('p',{style:{color:'#666',marginBottom:'1.5rem',lineHeight:1.7}},'診断を始める前に、事業部と名前を入力してください。'),
+    h('div',{style:{display:'flex',flexDirection:'column',gap:12,marginBottom:'1.5rem'}},
+      h('div',null,
+        h('label',{style:{fontSize:13,fontWeight:500,color:'#444',display:'block',marginBottom:6}},'事業部'),
+        h('input',{value:userInfo.dept,onChange:e=>setUserInfo(v=>({...v,dept:e.target.value})),placeholder:'例：営業部、人事部...',style:{width:'100%',padding:'12px 14px',borderRadius:10,border:'1.5px solid #d8d8dc',fontSize:15,outline:'none',boxSizing:'border-box'}})
+      ),
+      h('div',null,
+        h('label',{style:{fontSize:13,fontWeight:500,color:'#444',display:'block',marginBottom:6}},'名前'),
+        h('input',{value:userInfo.name,onChange:e=>setUserInfo(v=>({...v,name:e.target.value})),placeholder:'例：山田 太郎',style:{width:'100%',padding:'12px 14px',borderRadius:10,border:'1.5px solid #d8d8dc',fontSize:15,outline:'none',boxSizing:'border-box'},onKeyDown:e=>e.key==='Enter'&&(userInfo.name.trim()||userInfo.dept.trim())&&setScreen('questions')})
+      )
+    ),
+    h('button',{onClick:()=>setScreen('questions'),disabled:!userInfo.name.trim()&&!userInfo.dept.trim(),style:{width:'100%',padding:'13px',background:userInfo.name.trim()||userInfo.dept.trim()?'#7C5CB5':'#e8e8ec',color:userInfo.name.trim()||userInfo.dept.trim()?'white':'#999',border:'none',borderRadius:10,fontSize:15,fontWeight:500,cursor:userInfo.name.trim()||userInfo.dept.trim()?'pointer':'not-allowed',transition:'all 0.2s'}},'診断スタート →'),
+    
+  );
+
+  if(screen==='questions'){
+    const ps=page*PS+1,pe=(page+1)*PS,pct=Math.round((answered/50)*100);
+    return h('div',{style:{maxWidth:560,margin:'0 auto',padding:'1rem'}},
+      h('div',{style:{textAlign:'center',marginBottom:10}},h('span',{style:{background:ACCENT,color:'white',padding:'4px 18px',borderRadius:20,fontSize:13,fontWeight:600}},`Q${ps} - Q${pe}`)),
+      h('div',{style:{display:'flex',alignItems:'center',gap:8,marginBottom:'1.25rem'}},h('div',{style:{flex:1,height:4,background:'#e8e8ec',borderRadius:2}},h('div',{style:{height:'100%',width:pct+'%',background:ACCENT,borderRadius:2,transition:'width 0.3s'}})),h('span',{style:{fontSize:11,color:'#666',minWidth:32}},pct+'%')),
+      h('div',{style:{display:'flex',flexDirection:'column',gap:14}},
+        pageQs.map((q,qi)=>{const val=answers[page*PS+qi];return h('div',{key:q.id,style:{padding:'12px 14px',borderRadius:10,border:`0.5px solid ${val!==null?'#d8d8dc':'#e8e8ec'}`,background:'#fff'}},
+          h('div',{style:{display:'flex',alignItems:'flex-start',gap:8,marginBottom:10}},h('span',{style:{background:ACCENT,color:'white',padding:'2px 7px',borderRadius:5,fontSize:11,fontWeight:600,flexShrink:0,marginTop:2}},`Q${q.id}`),h('span',{style:{fontSize:14,lineHeight:1.6}},q.q)),
+          h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'0 2px',marginBottom:4}},[5,4,3,2,1].map(v=>h('div',{key:v,onClick:()=>setAns(qi,v),style:{width:42,height:42,borderRadius:'50%',background:val===v?ACCENT:'#f2f2f7',border:val===v?'none':'0.5px solid #d8d8dc',cursor:'pointer',transition:'all 0.15s',flexShrink:0}}))),
+          h('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',fontSize:11,color:'#999',padding:'0 2px'}},h('span',null,'そう思う'),h('div',{style:{flex:1,height:'1px',background:'#d8d8dc',margin:'0 8px',position:'relative'}},h('span',{style:{position:'absolute',left:-4,top:-5,fontSize:10}},'←'),h('span',{style:{position:'absolute',right:-4,top:-5,fontSize:10}},'→')),h('span',null,'思わない'))
+        );})
+      ),
+      h('div',{style:{display:'flex',gap:8,marginTop:'1.25rem'}},
+        page>0&&h('button',{onClick:()=>setPage(p=>p-1),style:{padding:'10px 16px',background:'transparent',border:'0.5px solid #d8d8dc',borderRadius:8,fontSize:14,color:'#666',cursor:'pointer'}},'← 戻る'),
+        h('button',{onClick:handleNext,disabled:!pageOK||saving,style:{flex:1,padding:'11px 0',background:pageOK?ACCENT:'#e8e8ec',color:pageOK?'white':'#999',border:'none',borderRadius:8,fontSize:14,fontWeight:500,cursor:pageOK&&!saving?'pointer':'not-allowed',transition:'all 0.2s'}},saving?'保存中...':(page<TP-1?'次へ →':'結果を見る →'))
+      )
+    );
+  }
+
+  return h('div',{style:{maxWidth:540,margin:'0 auto',padding:'2rem 1rem'}},
+    
+    h('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}},
+      h('div',{style:{display:'flex',alignItems:'center',gap:10}},
+        h('div',{style:{width:36,height:36,borderRadius:8,background:ACCENT,display:'flex',alignItems:'center',justifyContent:'center',color:'white',fontWeight:600,fontSize:16}},'D'),
+        h('h1',{style:{margin:0,fontSize:22,fontWeight:500}},'DISC 行動特性診断')
+      ),
+      
+    ),
+    h('p',{style:{color:'#666',margin:'0 0 1.5rem',lineHeight:1.7}},'50問の質問に5段階で回答してください。「そう思う」から「思わない」の5段階で、直感的に答えてください。'),
+    h('div',{style:{marginBottom:'1.5rem',borderRadius:16,overflow:'hidden',border:'0.5px solid #e8e8ec',padding:'8px 0',background:'#fff'}},h(Wheel,{normScores:null,highlight:null})),
+    h('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:'1.5rem'}},TYPES.map(t=>h('div',{key:t,style:{padding:'10px 12px',borderRadius:8,background:DISC[t].bg,border:`0.5px solid ${DISC[t].color}40`}},h('div',{style:{display:'flex',alignItems:'center',gap:6,marginBottom:3}},h('span',{style:{fontSize:15,fontWeight:600,color:DISC[t].color}},t),h('span',{style:{fontSize:13,color:DISC[t].txt}},DISC[t].name)),h('div',{style:{fontSize:11,color:DISC[t].txt,opacity:0.75}},DISC[t].axis)))),
+    h('div',{style:{fontSize:13,color:'#666',marginBottom:'1rem'}},'📝 50問 · 約10〜15分'),
+    h('button',{onClick:()=>setScreen('info'),style:{padding:'12px 0',background:ACCENT,color:'white',border:'none',borderRadius:8,fontSize:15,fontWeight:500,cursor:'pointer',width:'100%',marginBottom:10}},'診断を始める →'),
+    h('button',{onClick:()=>setScreen('aggregate'),style:{padding:'10px 0',background:'transparent',border:`0.5px solid ${ACCENT}50`,color:ACCENT,borderRadius:8,fontSize:14,cursor:'pointer',width:'100%'}},'📊 集計を見る（閲覧者用）')
+  );
+}
+
+ReactDOM.render(h(App),document.getElementById('root'));
+</script>
+</body>
+</html>
